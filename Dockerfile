@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy all source code
 COPY src/ ./src/
 COPY main_himas_federated.py .
+COPY hospital_client.py .
 
 # Expose port for Flower server
 EXPOSE 8080

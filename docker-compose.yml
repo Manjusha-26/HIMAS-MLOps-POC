@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   himas-server:
     build: .
@@ -11,32 +9,10 @@ services:
     build: .
     depends_on:
       - himas-server
-    command: python -c "
-      import sys, os, time;
-      sys.path.append('src');
-      time.sleep(5);
-      from data.medical_datasets import MedicalDataLoader;
-      from federated.flower_client import create_flower_client;
-      import flwr as fl;
-      loader = MedicalDataLoader();
-      hospital_data = loader.split_for_hospitals('breast_cancer', n_hospitals=3)[0];
-      client = create_flower_client(hospital_data);
-      fl.client.start_numpy_client(server_address='himas-server:8080', client=client)
-      "
+    command: python hospital_client.py 0 5
     
   hospital-2:
     build: .
     depends_on:
       - himas-server  
-    command: python -c "
-      import sys, os, time;
-      sys.path.append('src');
-      time.sleep(10);
-      from data.medical_datasets import MedicalDataLoader;
-      from federated.flower_client import create_flower_client;
-      import flwr as fl;
-      loader = MedicalDataLoader();
-      hospital_data = loader.split_for_hospitals('breast_cancer', n_hospitals=3)[1];
-      client = create_flower_client(hospital_data);
-      fl.client.start_numpy_client(server_address='himas-server:8080', client=client)
-      "
+    command: python hospital_client.py 1 10
