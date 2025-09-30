@@ -1,6 +1,7 @@
 """
 Medical dataset loaders for HIMAS federated learning
-Uses sklearn datasets: breast cancer and diabetes
+Uses sklearn datasets: breast cancer
+Loads datasets, splits for hospitals, and prepares for federated learning
 """
 
 import numpy as np

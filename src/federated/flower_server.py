@@ -119,7 +119,7 @@ class HIMASFederatedCoordinator:
         logger.info(f"   Hospitals: {len(hospital_data_list)}")
         logger.info(f"   Rounds: {self.num_rounds}")
         
-        from flower_client import HIMASFlowerClient, hospital_data_cache
+        from .flower_client import HIMASFlowerClient, hospital_data_cache
         
         # FIXED: Use Context parameter
         def client_fn(context: Context):
