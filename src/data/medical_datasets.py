@@ -18,18 +18,12 @@ class MedicalDataLoader:
     def __init__(self):
         self.datasets = {
             'breast_cancer': self._load_breast_cancer,
-            'diabetes': self._load_diabetes
         }
     
     def _load_breast_cancer(self) -> Tuple[np.ndarray, np.ndarray, List[str]]:
         """Load breast cancer dataset"""
         data = load_breast_cancer()
         return data.data, data.target, data.feature_names.tolist()
-    
-    def _load_diabetes(self) -> Tuple[np.ndarray, np.ndarray, List[str]]:
-        """Load diabetes dataset"""
-        data = load_diabetes()
-        return data.data, data.target, data.feature_names
     
     def get_dataset(self, dataset_name: str) -> Dict:
         """Get dataset by name"""
@@ -93,12 +87,19 @@ if __name__ == "__main__":
     loader = MedicalDataLoader()
     
     # Test loading datasets
-    bc_data = loader.get_dataset('breast_cancer')
-    print(f"Breast Cancer: {bc_data['n_samples']} samples, {bc_data['n_features']} features")
+    cancer_data = loader.get_dataset('breast_cancer')
+    print(f"Breast Cancer: {cancer_data['n_samples']} samples, {cancer_data['n_features']} features")
     
-    diabetes_data = loader.get_dataset('diabetes')
-    print(f"Diabetes: {diabetes_data['n_samples']} samples, {diabetes_data['n_features']} features")
-    
+    print("Feature names:", cancer_data['feature_names'])
+
     # Test hospital splitting
     hospital_splits = loader.split_for_hospitals('breast_cancer', n_hospitals=3)
     print(f"Split breast cancer data across {len(hospital_splits)} hospitals")
+
+    #Hospital data: list of dictionaries
+    ''' hospital_splits = [
+    {hospital_1_data},  # Dictionary for hospital 1
+    {hospital_2_data},  # Dictionary for hospital 2
+    {hospital_3_data}   # Dictionary for hospital 3 ]'''
+
+    #For each hospital it contains a dictionary with keys : as line 70

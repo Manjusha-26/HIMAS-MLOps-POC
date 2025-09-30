@@ -1,151 +1,192 @@
 """
 Flower federated learning server for HIMAS
 Coordinates federated learning across multiple hospitals
+Uses Flower 1.11.0 API
 """
 
-import flwr as fl
-from flwr.common import Metrics
+import numpy as np
 from typing import Dict, List, Tuple, Optional
 import logging
+import sys
+import os
+
+# Add src to path for imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+src_dir = os.path.dirname(current_dir)
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
+
+# Flower imports
+import flwr as fl
+from flwr.server import ServerApp, ServerConfig
+from flwr.server.strategy import FedAvg
+from flwr.common import Context, Metrics, Parameters, ndarrays_to_parameters
 
 logger = logging.getLogger(__name__)
 
+
 def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     """Aggregate evaluation metrics from all hospitals"""
+    accuracies = [num_examples * m.get("eval_accuracy", 0) for num_examples, m in metrics]
+    examples = [num_examples for num_examples, m in metrics]
     
-    # Extract accuracies and sample counts
-    accuracies = [num_examples * m["test_accuracy"] for num_examples, m in metrics if "test_accuracy" in m]
-    examples = [num_examples for num_examples, m in metrics if "test_accuracy" in m]
-    
-    if not accuracies:
+    if not examples or sum(examples) == 0:
         return {}
     
-    # Calculate weighted average accuracy
     aggregated_accuracy = sum(accuracies) / sum(examples)
     
     logger.info(f"Federated evaluation - Aggregated accuracy: {aggregated_accuracy:.4f}")
-    logger.info(f"Total examples across hospitals: {sum(examples)}")
+    logger.info(f"   Total examples: {sum(examples)}")
     
     return {"federated_accuracy": aggregated_accuracy}
 
-def get_federated_strategy() -> fl.server.strategy.Strategy:
-    """Create federated learning strategy for HIMAS"""
+
+def get_initial_parameters() -> Parameters:
+    """Initialize global model parameters"""
+    from sklearn.linear_model import LogisticRegression
     
-    strategy = fl.server.strategy.FedAvg(
-        # Fraction of clients to sample for training
-        fraction_fit=1.0,  # Use all hospitals
-        
-        # Fraction of clients to sample for evaluation  
-        fraction_evaluate=1.0,  # Evaluate on all hospitals
-        
-        # Minimum number of clients for training
-        min_fit_clients=2,  # Need at least 2 hospitals
-        
-        # Minimum number of clients for evaluation
+    n_features = 30
+    model = LogisticRegression(max_iter=5000, random_state=42)
+    
+    dummy_X = np.random.randn(10, n_features)
+    dummy_y = np.random.randint(0, 2, 10)
+    model.fit(dummy_X, dummy_y)
+    
+    initial_params = [model.coef_, model.intercept_]
+    
+    logger.info(f"Initialized global model")
+    logger.info(f"  Coef shape: {initial_params[0].shape}")
+    logger.info(f"  Intercept shape: {initial_params[1].shape}")
+    
+    return ndarrays_to_parameters(initial_params)
+
+
+def get_federated_strategy() -> FedAvg:
+    """Create federated learning strategy"""
+    initial_parameters = get_initial_parameters()
+    
+    strategy = FedAvg(
+        fraction_fit=1.0,
+        fraction_evaluate=1.0,
+        min_fit_clients=2,
         min_evaluate_clients=2,
-        
-        # Minimum available clients required
         min_available_clients=2,
-        
-        # Aggregate evaluation metrics
+        initial_parameters=initial_parameters,
         evaluate_metrics_aggregation_fn=weighted_average,
-        
-        # Initial model parameters (will be set by first client)
-        initial_parameters=None
     )
     
-    logger.info("Created FedAvg strategy for HIMAS federated learning")
+    logger.info("Created FedAvg strategy")
     return strategy
 
-def start_federated_server(server_address: str = "0.0.0.0:8080", num_rounds: int = 3):
-    """Start the federated learning server"""
+
+# Create Flower ServerApp
+app = ServerApp()
+
+
+@app.main()
+def main(context: Context) -> None:
+    """Main server application entry point"""
+    logger.info("\n" + "="*70)
+    logger.info("HIMAS Federated Learning Server")
+    logger.info("="*70)
     
-    logger.info(f"Starting HIMAS federated learning server on {server_address}")
-    logger.info(f"Training rounds: {num_rounds}")
+    num_rounds = context.run_config.get("num-server-rounds", 3)
     
-    # Create strategy
+    logger.info(f"\nConfiguration:")
+    logger.info(f"   - Server rounds: {num_rounds}")
+    logger.info(f"   - Strategy: FedAvg")
+    logger.info(f"   - Min hospitals: 2")
+    
     strategy = get_federated_strategy()
     
-    # Configure server
-    config = fl.server.ServerConfig(num_rounds=num_rounds)
+    logger.info(f"\nStarting federated learning...")
+    logger.info("="*70 + "\n")
     
-    # Start server
-    fl.server.start_server(
-        server_address=server_address,
-        config=config,
-        strategy=strategy
-    )
+    config = ServerConfig(num_rounds=num_rounds)
+
 
 class HIMASFederatedCoordinator:
-    """Coordinates the entire federated learning process"""
+    """Coordinates federated learning simulation"""
     
     def __init__(self, num_rounds: int = 3):
         self.num_rounds = num_rounds
-        self.server_address = "localhost:8080"
-        
+    
     def run_simulation(self, hospital_data_list: List[Dict]):
-        """Run federated learning simulation with multiple hospitals"""
+        """Run federated learning simulation"""
+        logger.info("\n" + "="*70)
+        logger.info("HIMAS Federated Learning Simulation")
+        logger.info("="*70)
+        logger.info(f"   Hospitals: {len(hospital_data_list)}")
+        logger.info(f"   Rounds: {self.num_rounds}")
         
-        logger.info("Starting HIMAS federated learning simulation")
-        logger.info(f"Number of hospitals: {len(hospital_data_list)}")
+        from flower_client import HIMASFlowerClient, hospital_data_cache
         
-        # Import here to avoid circular imports
-        from flower_client import create_flower_client
-        
-        # Create client functions for each hospital
-        def client_fn(cid: str):
-            """Create client for hospital with given ID"""
+        # FIXED: Use Context parameter
+        def client_fn(context: Context):
+            """Create client for hospital"""
+            cid = context.node_config.get("partition-id", 0)
             hospital_idx = int(cid)
-            hospital_data = hospital_data_list[hospital_idx]
-            
-            logger.info(f"Creating client for {hospital_data['hospital_id']}")
-            return create_flower_client(hospital_data)
+            return HIMASFlowerClient(partition_id=hospital_idx).to_client()
         
-        # Run simulation
+        # Populate cache
+        for idx, hospital_data in enumerate(hospital_data_list):
+            hospital_data_cache[idx] = hospital_data
+        
+        logger.info(f"\nStarting simulation...")
+        logger.info("="*70 + "\n")
+        
         history = fl.simulation.start_simulation(
             client_fn=client_fn,
             num_clients=len(hospital_data_list),
-            config=fl.server.ServerConfig(num_rounds=self.num_rounds),
+            config=ServerConfig(num_rounds=self.num_rounds),
             strategy=get_federated_strategy(),
-            client_resources={"num_cpus": 1, "num_gpus": 0}
+            client_resources={"num_cpus": 1, "num_gpus": 0.0}
         )
         
-        logger.info("Federated learning simulation completed")
+        logger.info("\n" + "="*70)
+        logger.info("Simulation completed!")
+        logger.info("="*70 + "\n")
+        
         return history
 
-# Test the federated server
+
 if __name__ == "__main__":
-    # Import data loader
-    import sys
-    import os
-    sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'data'))
-    from medical_datasets import MedicalDataLoader
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
     
-    # Load and prepare data for multiple hospitals
+    from data.medical_datasets import MedicalDataLoader
+    
+    print("\n" + "="*70)
+    print("HIMAS Federated Learning Server - Test Mode")
+    print("="*70)
+    
     loader = MedicalDataLoader()
     hospital_data_list = loader.split_for_hospitals('breast_cancer', n_hospitals=3)
     
-    print("=== HIMAS Federated Learning Server Test ===")
-    print(f"Prepared data for {len(hospital_data_list)} hospitals:")
-    
+    print(f"\nPrepared data for {len(hospital_data_list)} hospitals:")
     for hospital_data in hospital_data_list:
-        print(f"- {hospital_data['hospital_id']}: {hospital_data['n_train_samples']} train, {hospital_data['n_test_samples']} test")
+        print(f"   - {hospital_data['hospital_id']}: "
+              f"{hospital_data['n_train_samples']} train, "
+              f"{hospital_data['n_test_samples']} test")
     
-    # Test simulation
-    coordinator = HIMASFederatedCoordinator(num_rounds=2)
+    print(f"\nRunning simulation...")
+    print("="*70 + "\n")
     
-    print(f"\nRunning federated learning simulation...")
-    print("This will simulate 3 hospitals collaborating on breast cancer diagnosis")
+    coordinator = HIMASFederatedCoordinator(num_rounds=3)
     
     try:
         history = coordinator.run_simulation(hospital_data_list)
-        print("✅ Federated learning simulation completed successfully!")
         
-        # Display results
-        if history.metrics_distributed and "federated_accuracy" in history.metrics_distributed:
-            final_accuracy = history.metrics_distributed["federated_accuracy"][-1][1]
-            print(f"Final federated model accuracy: {final_accuracy:.4f}")
+        print("\n" + "="*70)
+        print("Simulation completed successfully!")
+        print("="*70)
+        print("\nFederated model training complete!")
+        print("All 3 hospitals collaborated without sharing patient data.")
+        print("="*70)
         
     except Exception as e:
-        print(f"Simulation failed: {e}")
-        print("This is normal - the full simulation needs all components running together")
+        print(f"\nError: {e}")
+        import traceback
+        traceback.print_exc()

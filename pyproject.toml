@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "himas-federated-learning"
+version = "0.1.0"
+dependencies = [
+    "flwr>=1.11.0",
+    "numpy>=1.21.0",
+    "scikit-learn>=1.0.0",
+]
+
+[tool.flwr.app]
+publisher = "himas"
+
+[tool.flwr.app.components]
+serverapp = "src.federated.flower_server:app"
+clientapp = "src.federated.flower_client:app"
+
+[tool.flwr.app.config]
+num-server-rounds = 5
+
+[tool.flwr.federations]
+default = "local-simulation"
+
+[tool.flwr.federations.local-simulation]
+options.num-supernodes = 3
