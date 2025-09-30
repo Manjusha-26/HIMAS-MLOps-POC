@@ -14,7 +14,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 from src.data.medical_datasets import MedicalDataLoader
 from src.storage.medical_knowledge import MedicalKnowledgeStore  
 from src.federated.flower_server import HIMASFederatedCoordinator
-from src.federated.flower_client import create_flower_client
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -39,10 +38,8 @@ class CompleteFederatedHIMAS:
         # Step 1: Load medical datasets
         print("\n1. Loading Medical Datasets...")
         bc_data = self.data_loader.get_dataset('breast_cancer')
-        diabetes_data = self.data_loader.get_dataset('diabetes')
         
         print(f"   - Breast Cancer: {bc_data['n_samples']} samples, {bc_data['n_features']} features")
-        print(f"   - Diabetes: {diabetes_data['n_samples']} samples, {diabetes_data['n_features']} features")
         
         # Step 2: Split data across hospitals
         print("\n2. Simulating 3 Hospital Networks...")
@@ -103,7 +100,6 @@ class CompleteFederatedHIMAS:
         
         print("\n" + "=" * 60)
         print("HIMAS Layer 2 PoC Successfully Demonstrated!")
-        print("Ready for integration with other layers (Layer 1, 3, 4, 5)")
         print("=" * 60)
 
 def main():
